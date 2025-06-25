@@ -7,10 +7,10 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Copiar el archivo de requerimientos primero para aprovechar el caché de Docker
-COPY requierments.txt .
+COPY requirements.txt .
 
 # Instalar las dependencias de Python
-RUN pip install --no-cache-dir -r requierments.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar el resto del código de la aplicación
 COPY . .
