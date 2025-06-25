@@ -26,7 +26,7 @@ jobs:
       # Ejecuta el docker-compose.yml para iniciar la app vulnerable y la DB.
       # El '-d' (detached) es crucial para que el workflow continúe al siguiente paso.
       - name: Iniciar servicios con Docker Compose
-        run: docker-compose up -d
+        run: docker compose up -d
 
       # 3. Esperar a que los servicios se inicien
       # Es una buena práctica dar tiempo a que la base de datos se inicialice
